@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { FormStatus, Withdrawal } from "@/lib/types";
+import { postWithdrawal, getWithdrawal } from "@/lib/api";
 
 interface WithdrawState {
   amount: string;
@@ -14,14 +15,10 @@ interface WithdrawState {
   setDestination: (value: string) => void;
   setConfirmed: (value: boolean) => void;
   resetForm: () => void;
-  regenerateKey: () => void;
-
-  setStatus: (status: FormStatus) => void;
-  setError: (error: string | null) => void;
-  setWithdrawal: (withdrawal: Withdrawal | null) => void;
+  submit: () => Promise<void>;
 }
 
-export const useWithdrawStore = create<WithdrawState>((set) => ({
+export const useWithdrawStore = create<WithdrawState>((set, get) => ({
   amount: "",
   destination: "",
   confirmed: false,
@@ -45,9 +42,41 @@ export const useWithdrawStore = create<WithdrawState>((set) => ({
       idempotencyKey: crypto.randomUUID(),
     }),
 
-  regenerateKey: () => set({ idempotencyKey: crypto.randomUUID() }),
+  submit: async () => {
+    const state = get();
 
-  setStatus: (status) => set({ status }),
-  setError: (error) => set({ error }),
-  setWithdrawal: (withdrawal) => set({ withdrawal }),
+    if (state.status === "loading") return;
+
+    set({ status: "loading", error: null });
+
+    try {
+      const withdrawal = await postWithdrawal({
+        amount: parseFloat(state.amount),
+        destination: state.destination.trim(),
+        idempotency_key: state.idempotencyKey,
+      });
+
+      const updated = await getWithdrawal(withdrawal.id);
+
+      set({
+        status: "success",
+        withdrawal: { ...withdrawal, status: updated.status },
+      });
+    } catch (err) {
+      const error = err as Error & { status?: number };
+
+      if (error.status === 409) {
+        set({
+          status: "error",
+          error: "This withdrawal has already been submitted.",
+          idempotencyKey: crypto.randomUUID(),
+        });
+      } else {
+        set({
+          status: "error",
+          error: "Network error. Please try again.",
+        });
+      }
+    }
+  },
 }));
