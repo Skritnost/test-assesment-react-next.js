@@ -1,36 +1,58 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Withdraw App
+
+A USDT withdrawal page built with Next.js, TypeScript, Tailwind CSS, and Zustand.
 
 ## Getting Started
 
-First, run the development server:
-
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev       # http://localhost:3000
+npm test          # run tests
+npm run build     # production build
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Key Decisions
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### State Management
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Zustand was chosen for its simplicity — a single store manages form fields, submission status (`idle` → `loading` → `success` / `error`), and the withdrawal result. No providers or context wrappers needed.
 
-## Learn More
+### API Layer
 
-To learn more about Next.js, take a look at the following resources:
+The API client (`src/lib/api.ts`) is a mock that simulates real behavior:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- **Idempotency**: Each submission generates a `crypto.randomUUID()` key. The mock tracks used keys and returns `409` on duplicates.
+- **Error handling**: Network errors preserve form data and allow retry. A `409` shows a user-friendly message and regenerates the key.
+- **Double-submit protection**: The store guards against concurrent submissions by checking `status === "loading"` before proceeding.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Authentication (Production Approach)
 
-## Deploy on Vercel
+The app does not implement auth. In production, the access token should be stored in an **httpOnly, Secure, SameSite=Strict cookie** — never in `localStorage` or `sessionStorage`. This prevents XSS from accessing the token. The API client would send credentials via cookies automatically, and a server-side middleware (Next.js middleware or API route) would handle token refresh.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Security
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- No use of `dangerouslySetInnerHTML`
+- All user-visible text is rendered through React's built-in escaping
+- Form inputs are validated client-side before submission
+
+## Project Structure
+
+```
+src/
+├── app/                  # Next.js App Router pages
+├── components/
+│   └── WithdrawForm.tsx  # Main form component
+├── store/
+│   └── withdrawStore.ts  # Zustand store
+├── lib/
+│   ├── api.ts            # Mock API client
+│   └── types.ts          # Shared TypeScript types
+└── __tests__/
+    └── WithdrawForm.test.tsx
+```
+
+## Tests
+
+- **Happy-path submit**: fills form → submits → verifies success state with withdrawal details
+- **API error handling**: simulates network failure → verifies error message + form data preserved
+- **Double-submit protection**: rapid clicks → verifies only one API call is made

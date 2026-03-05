@@ -1,6 +1,5 @@
 import { Withdrawal } from "./types";
 
-const API_BASE = "/v1";
 const MOCK_DELAY = 800;
 
 const usedIdempotencyKeys = new Set<string>();
